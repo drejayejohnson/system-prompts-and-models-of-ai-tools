@@ -1,0 +1,40 @@
+{
+  "name": "Personal Assistant",
+  "short_name": "Assistant",
+  "description": "Your AI-powered personal business assistant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf9f7",
+  "theme_color": "#e8836a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["productivity", "business"],
+  "shortcuts": [
+    {
+      "name": "Voice",
+      "url": "/",
+      "description": "Start voice assistant"
+    },
+    {
+      "name": "Email",
+      "url": "/email",
+      "description": "Check your emails"
+    },
+    {
+      "name": "Calendar",
+      "url": "/calendar",
+      "description": "View your schedule"
+    }
+  ]
+}
