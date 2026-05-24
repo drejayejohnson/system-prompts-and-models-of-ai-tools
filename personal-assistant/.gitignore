@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# environment files
+.env*.local
+.env
+
+# Electron build artifacts
+dist/
+release/
+
+# database
+*.db
+*.db-shm
+*.db-wal
+
+# misc
+.DS_Store
+*.pem
+.vercel
