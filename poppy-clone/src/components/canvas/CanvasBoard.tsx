@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,42 +8,59 @@ import {
   MiniMap,
   BackgroundVariant,
   useReactFlow,
+  type NodeChange,
+  type EdgeChange,
+  type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useCanvas } from '@/hooks/useCanvas';
 import { IdeaNode } from './nodes/IdeaNode';
 import { PromptNode } from './nodes/PromptNode';
 import { ContentNode } from './nodes/ContentNode';
 import { CanvasToolbar } from './CanvasToolbar';
-import type { ContentType, GenerationRequest } from '@/types/generation';
-import type { BrandProfile } from '@/types/brand';
+import type { ContentType } from '@/types/generation';
 
-const NODE_TYPES = {
-  idea: IdeaNode,
-  prompt: PromptNode,
-  content: ContentNode,
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyNode = import('@xyflow/react').Node<any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyEdge = import('@xyflow/react').Edge<any>;
 
 interface CanvasBoardProps {
-  brandProfile: BrandProfile | null;
+  nodes: AnyNode[];
+  edges: AnyEdge[];
+  onNodesChange: (changes: NodeChange[]) => void;
+  onEdgesChange: (changes: EdgeChange[]) => void;
+  onConnect: (connection: Connection) => void;
+  onAddIdea: () => void;
+  onAddPrompt: () => void;
+  onClear: () => void;
   onGenerateFromNode?: (topic: string, contentType: ContentType) => void;
 }
 
-export function CanvasBoard({ brandProfile, onGenerateFromNode }: CanvasBoardProps) {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode, clearCanvas } =
-    useCanvas();
+export function CanvasBoard({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
+  onAddIdea,
+  onAddPrompt,
+  onClear,
+  onGenerateFromNode,
+}: CanvasBoardProps) {
   const { screenToFlowPosition } = useReactFlow();
 
-  const addIdea = useCallback(() => {
-    const pos = { x: 300 + Math.random() * 300, y: 200 + Math.random() * 200 };
-    addNode('idea', { label: 'Idea', text: '', color: '#fef9c3' }, pos);
-  }, [addNode]);
-
-  const addPrompt = useCallback(() => {
-    const pos = { x: 300 + Math.random() * 300, y: 200 + Math.random() * 200 };
-    addNode('prompt', { label: 'Prompt', promptText: '', contentType: 'blog_post' }, pos);
-  }, [addNode]);
+  // Stable nodeTypes — only recreate when onGenerateFromNode changes
+  const nodeTypes = useMemo(
+    () => ({
+      idea: IdeaNode,
+      // Pass onGenerate through by creating a stable wrapper component
+      prompt: (props: Parameters<typeof PromptNode>[0]) =>
+        PromptNode({ ...props, onGenerate: onGenerateFromNode }),
+      content: ContentNode,
+    }),
+    [onGenerateFromNode]
+  );
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -51,24 +68,22 @@ export function CanvasBoard({ brandProfile, onGenerateFromNode }: CanvasBoardPro
       const type = e.dataTransfer.getData('node-type');
       if (!type) return;
       const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      addNode(type, { label: type, text: '' }, pos);
+      // Signal to parent to add a node at this position
+      // (parent handles actual addNode since it owns state)
+      const event = new CustomEvent('canvas:add-node', {
+        detail: { type, position: pos },
+      });
+      window.dispatchEvent(event);
     },
-    [addNode, screenToFlowPosition]
+    [screenToFlowPosition]
   );
-
-  const nodeTypes = {
-    idea: IdeaNode,
-    prompt: (props: Parameters<typeof PromptNode>[0]) =>
-      PromptNode({ ...props, onGenerate: onGenerateFromNode }),
-    content: ContentNode,
-  };
 
   return (
     <div className="relative w-full h-full">
       <CanvasToolbar
-        onAddIdea={addIdea}
-        onAddPrompt={addPrompt}
-        onClear={clearCanvas}
+        onAddIdea={onAddIdea}
+        onAddPrompt={onAddPrompt}
+        onClear={onClear}
       />
 
       <ReactFlow

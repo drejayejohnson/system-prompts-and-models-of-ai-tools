@@ -62,10 +62,17 @@ export function GenerationPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
         <div className="flex items-center gap-2">
-          {step !== 'start' && step !== 'output' && (
+          {step !== 'start' && (
             <button
-              onClick={() => setStep(step === 'form' ? 'start' : 'start')}
-              className="text-slate-400 hover:text-slate-600 text-sm mr-1"
+              onClick={() => {
+                if (step === 'output') {
+                  reset();
+                  setStep('form');
+                } else {
+                  setStep('start');
+                }
+              }}
+              className="text-slate-400 hover:text-slate-600 text-sm mr-1 w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100"
             >
               ←
             </button>
@@ -78,7 +85,17 @@ export function GenerationPanel({
             {step === 'output' && 'Generated Content'}
           </h2>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">×</button>
+        <div className="flex items-center gap-2">
+          {step === 'output' && (
+            <button
+              onClick={() => { reset(); setSelectedType(null); setSelectedTemplate(null); setStep('start'); }}
+              className="text-xs text-pink-500 hover:text-pink-700 font-medium px-2 py-1 rounded hover:bg-pink-50"
+            >
+              + New
+            </button>
+          )}
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none w-6 h-6 flex items-center justify-center">×</button>
+        </div>
       </div>
 
       {/* Brand voice indicator */}

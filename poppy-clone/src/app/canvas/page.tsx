@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { ReactFlowProvider } from '@xyflow/react';
 import { AppShell } from '@/components/layout/AppShell';
@@ -13,18 +13,55 @@ import type { ContentType } from '@/types/generation';
 
 const CanvasBoard = dynamic(
   () => import('@/components/canvas/CanvasBoard').then((m) => m.CanvasBoard),
-  { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center text-slate-400">Loading canvas...</div> }
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
+        Loading canvas...
+      </div>
+    ),
+  }
 );
 
 export default function CanvasPage() {
   const { profile } = useBrandProfile();
-  const { addNode } = useCanvas();
+  const {
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    clearCanvas,
+  } = useCanvas();
+
   const [showGeneration, setShowGeneration] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [nodeGenerationArgs, setNodeGenerationArgs] = useState<{
     topic: string;
     contentType: ContentType;
   } | null>(null);
+
+  // Listen for drag-drop node creation events from the canvas
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { type, position } = (e as CustomEvent).detail;
+      const data = type === 'idea'
+        ? { label: 'Idea', text: '', color: '#fef9c3' }
+        : { label: 'Prompt', promptText: '', contentType: 'blog_post' };
+      addNode(type, data, position);
+    };
+    window.addEventListener('canvas:add-node', handler);
+    return () => window.removeEventListener('canvas:add-node', handler);
+  }, [addNode]);
+
+  const handleAddIdea = useCallback(() => {
+    addNode('idea', { label: 'Idea', text: '', color: '#fef9c3' });
+  }, [addNode]);
+
+  const handleAddPrompt = useCallback(() => {
+    addNode('prompt', { label: 'Prompt', promptText: '', contentType: 'blog_post' });
+  }, [addNode]);
 
   const handleGenerateFromNode = useCallback(
     (topic: string, contentType: ContentType) => {
@@ -55,40 +92,51 @@ export default function CanvasPage() {
         showChatButton
         onGenerateToggle={() => {
           setShowGeneration((v) => !v);
-          setShowChat(false);
-          setNodeGenerationArgs(null);
+          if (showGeneration) {
+            // closing
+          } else {
+            setShowChat(false);
+            setNodeGenerationArgs(null);
+          }
         }}
         onChatToggle={() => {
           setShowChat((v) => !v);
-          setShowGeneration(false);
+          if (!showChat) setShowGeneration(false);
         }}
       />
 
-      <div className="flex-1 flex min-h-0 relative">
-        {/* Canvas */}
-        <div className="flex-1 relative">
+      <div className="flex-1 flex min-h-0">
+        {/* Canvas — owns no state, reads from page */}
+        <div className="flex-1 relative overflow-hidden">
           <ReactFlowProvider>
             <CanvasBoard
-              brandProfile={profile}
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onAddIdea={handleAddIdea}
+              onAddPrompt={handleAddPrompt}
+              onClear={clearCanvas}
               onGenerateFromNode={handleGenerateFromNode}
             />
           </ReactFlowProvider>
         </div>
 
-        {/* Generation Panel (slide-in from right) */}
+        {/* Generation Panel */}
         {showGeneration && (
           <div className="w-[420px] border-l border-slate-200 bg-white flex flex-col shrink-0 overflow-hidden">
             <GenerationPanel
               brandProfile={profile}
               initialTopic={nodeGenerationArgs?.topic}
               initialContentType={nodeGenerationArgs?.contentType}
-              onClose={() => setShowGeneration(false)}
+              onClose={() => { setShowGeneration(false); setNodeGenerationArgs(null); }}
               onAddToCanvas={handleAddToCanvas}
             />
           </div>
         )}
 
-        {/* Chat Panel (slide-in from right) */}
+        {/* Chat Panel */}
         {showChat && (
           <div className="w-[380px] border-l border-slate-200 bg-white flex flex-col shrink-0 overflow-hidden">
             <ChatPanel

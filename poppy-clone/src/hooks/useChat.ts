@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { ChatMessage } from '@/types/chat';
 import type { BrandProfile } from '@/types/brand';
-import { useGeneration } from './useGeneration';
 import type { GenerationRequest } from '@/types/generation';
+import { createEmptyBrandProfile } from '@/lib/brand-voice';
 
 export function useChat(brandProfile: BrandProfile | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const { generate, isGenerating } = useGeneration();
+  const [isTyping, setIsTyping] = useState(false);
+  // Keep a ref to messages so sendMessage closure always sees the latest
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -29,62 +32,70 @@ export function useChat(brandProfile: BrandProfile | null) {
       };
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setIsTyping(true);
 
-      const fakeRequest: GenerationRequest = {
+      const chatRequest: GenerationRequest = {
         contentType: 'blog_post',
         topic: text,
         lengthPreference: 'medium',
       };
 
-      // We need to stream into the assistant message
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          request: fakeRequest,
-          brandProfile,
-          mode: 'chat',
-          chatHistory: messages,
-        }),
-      });
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            request: chatRequest,
+            brandProfile: brandProfile ?? createEmptyBrandProfile(),
+            mode: 'chat',
+            // Use ref so we send the actual current history, not a stale closure value
+            chatHistory: messagesRef.current,
+          }),
+        });
 
-      if (!res.ok || !res.body) return;
+        if (!res.ok || !res.body) {
+          setIsTyping(false);
+          return;
+        }
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let accumulated = '';
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulated = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() ?? '';
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') break;
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.text) {
-              accumulated += parsed.text;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId ? { ...m, content: accumulated } : m
-                )
-              );
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6);
+            if (data === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.text) {
+                accumulated += parsed.text;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantMsgId ? { ...m, content: accumulated } : m
+                  )
+                );
+              }
+            } catch {
+              // skip malformed chunks
             }
-          } catch {
-            // skip
           }
         }
+      } finally {
+        setIsTyping(false);
       }
     },
-    [messages, brandProfile, generate]
+    [brandProfile]
   );
 
   const clearChat = useCallback(() => setMessages([]), []);
 
-  return { messages, sendMessage, isTyping: isGenerating, clearChat };
+  return { messages, sendMessage, isTyping, clearChat };
 }
